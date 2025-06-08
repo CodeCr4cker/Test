@@ -1,3 +1,4 @@
+```
 src/
   App.jsx
   components/
@@ -30,3 +31,4 @@ src/
   utils/
     presence.js
     biometric.js
+```
