@@ -1,0 +1,34 @@
+```
+src/
+  App.jsx
+  components/
+    Auth/
+      AuthForm.js
+    Profile/
+      ProfilePhoto.js
+      ProfileSettings.js
+      UserHeader.js
+    Friends/
+      FriendSearch.js
+      FriendRequests.js
+      BlockList.js
+    Chat/
+      ChatList.js
+      ChatWindow.js
+    Status/
+      PostStatus.js
+      StatusFeed.js
+    Notifications/
+      Notification.js
+  firebase/
+    auth.js
+    db.js
+    chat.js
+    chatLock.js
+    status.js
+    storage.js
+    config.js
+  utils/
+    presence.js
+    biometric.js
+```
