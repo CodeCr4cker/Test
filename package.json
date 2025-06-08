@@ -2,6 +2,8 @@
   "name": "test",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://CoderCr4cker.github.io/test"
+  
   "dependencies": {
     "@capacitor/android": "^7.2.0",
     "@capacitor/core": "^7.2.0",
