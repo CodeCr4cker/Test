@@ -1,0 +1,836 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  User, Send, Plus, Settings, LogOut, Moon, Sun, Image, Smile, Edit3, Trash2, Check, CheckCheck,
+  MessageSquare, Users, Bell,  BellOff, Search, MoreVertical
+} from 'lucide-react';
+
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore, 
+  getDocs, 
+  collection,  
+  addDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  where, 
+  doc, 
+  updateDoc,
+  deleteDoc, 
+  serverTimestamp
+} from "firebase/firestore";
+import {
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
+  onAuthStateChanged, updateProfile
+} from "firebase/auth";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBFBtuIw0HVJl-HYZ9DSP1VZqwXMJli_W8",
+  authDomain: "darknet-chat-f6b5a.firebaseapp.com",
+  projectId: "darknet-chat-f6b5a",
+  storageBucket: "darknet-chat-f6b5a.appspot.com",
+  messagingSenderId: "485072993943",
+  appId: "1:485072993943:web:262edab82d07a87b4733d2",
+  measurementId: "G-2WL2PC8N6H",
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+// Loader
+const Loader = ({ onFinish }) => {
+  useEffect(() => {
+    if (onFinish) {
+      const timer = setTimeout(onFinish, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [onFinish]);
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-white dark:bg-gray-900">
+      <div className="w-20 h-20 mb-4 rounded-full bg-blue-500 flex items-center justify-center">
+        <MessageSquare size={48} className="text-white" />
+      </div>
+      <div className="loader mb-2"></div>
+      <p className="text-gray-700 dark:text-gray-300">Loading...</p>
+    </div>
+  );
+};
+
+// Login/Register by username/password
+const Login = ({ onLogin, onShowRegister }) => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const handleSubmit = async e => {
+    e.preventDefault();
+    try {
+      const email = `${username}@anonchat.app`;
+      await signInWithEmailAndPassword(auth, email, password);
+      onLogin();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  return (
+    <form onSubmit={handleSubmit} className="max-w-sm mx-auto mt-10 p-6 bg-white dark:bg-gray-800 rounded shadow">
+      <h2 className="text-2xl font-semibold mb-6 text-center">Login</h2>
+      {error && <div className="text-red-500 mb-2">{error}</div>}
+      <input
+        className="w-full mb-4 px-3 py-2 border rounded"
+        placeholder="Username"
+        value={username}
+        onChange={e => setUsername(e.target.value)}
+        required
+        autoFocus
+      />
+      <input
+        className="w-full mb-4 px-3 py-2 border rounded"
+        placeholder="Password"
+        type="password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        required
+      />
+      <button className="w-full bg-blue-500 text-white py-2 rounded" type="submit">
+        Login
+      </button>
+      <div className="text-center mt-4">
+        <button type="button" className="text-blue-600" onClick={onShowRegister}>
+          Create Account
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const Register = ({ onRegister }) => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    try {
+      // Check if username exists
+      const q = query(collection(db, "users"), where("username", "==", username));
+      const docs = await getDocs(q);
+      if (!docs.empty) throw new Error("Username already taken");
+      // Use a dummy email (required for Firebase auth)
+      const email = `${username}@anonchat.app`;
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(user, { displayName: username });
+      await addDoc(collection(db, "users"), { uid: user.uid, username, bio: "", photoURL: "" });
+      setSuccess(true);
+      setTimeout(onRegister, 1500);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-sm mx-auto mt-10 p-6 bg-white dark:bg-gray-800 rounded shadow">
+      <h2 className="text-2xl font-semibold mb-6 text-center">Register</h2>
+      {error && <div className="text-red-500 mb-2">{error}</div>}
+      {success && <div className="text-green-600 mb-2">Account created! Redirecting...</div>}
+      <input
+        className="w-full mb-4 px-3 py-2 border rounded"
+        placeholder="Unique Username"
+        value={username}
+        onChange={e => setUsername(e.target.value)}
+        required
+        autoFocus
+      />
+      <input
+        className="w-full mb-4 px-3 py-2 border rounded"
+        placeholder="Password"
+        type="password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        required
+        minLength={6}
+      />
+      <button className="w-full bg-blue-500 text-white py-2 rounded" type="submit">
+        Register
+      </button>
+      <div className="text-center mt-4">
+        <span className="text-gray-500">Already have an account? Log in.</span>
+      </div>
+    </form>
+  );
+};
+
+// Sidebar
+const Sidebar = ({
+  user, onProfile, onFriends, onRequests, onSettings, onLogout, onAbout, selected
+}) => (
+  <div className="w-16 bg-gray-800 flex flex-col items-center py-4 space-y-4">
+    <button onClick={onProfile} className="w-12 h-12 mb-2">
+      {user.photoURL
+        ? <img src={user.photoURL} className="w-12 h-12 rounded-full" alt="Profile" />
+        : <User className="w-12 h-12 rounded-full bg-blue-400 text-white" />}
+    </button>
+    <button onClick={onFriends}><Users className="text-white" /></button>
+    <button onClick={onRequests}><Bell className="text-white" /></button>
+    <button onClick={onSettings}><Settings className="text-white" /></button>
+    <button onClick={onAbout}><MessageSquare className="text-white" /></button>
+    <div className="flex-1"></div>
+    <button onClick={onLogout} className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center">
+      <LogOut className="text-white" />
+    </button>
+  </div>
+);
+
+// AboutUs Modal
+const AboutUs = ({ onClose }) => (
+  <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md w-full relative">
+      <button className="absolute top-2 right-2" onClick={onClose}>✖</button>
+      <div className="w-24 h-24 rounded-full mx-auto mb-4 bg-blue-100 flex items-center justify-center">
+        <User size={48} className="text-blue-700" />
+      </div>
+      <h2 className="text-xl font-semibold text-center">About This App</h2>
+      <p className="mt-4 text-center text-gray-700 dark:text-gray-300">
+        Developed by <b>Your Name</b>.<br />
+        Secure, privacy-first, modern chat with friend requests, blocking, and more!
+      </p>
+    </div>
+  </div>
+);
+
+// Emoji Picker
+const EmojiPicker = ({ onEmojiSelect, isOpen, onClose }) => {
+  const emojis = ['😀', '😂', '😍', '🥰', '😊', '😎', '🤔', '😢', '😡', '👍', '👎', '❤️', '🔥', '💯'];
+  if (!isOpen) return null;
+  return (
+    <div className="absolute bottom-12 right-0 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-3 shadow-lg z-50">
+      <div className="grid grid-cols-7 gap-2">
+        {emojis.map((emoji, index) => (
+          <button
+            key={index}
+            onClick={() => {
+              onEmojiSelect(emoji);
+              onClose();
+            }}
+            className="text-xl hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Message
+const Message = ({ message, currentUser, onEdit, onDelete }) => {
+  const [showActions, setShowActions] = useState(false);
+  const isOwn = message.senderId === currentUser?.uid;
+  return (
+    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-4`}>
+      <div
+        className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative group ${
+          isOwn
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+        }`}
+        onMouseEnter={() => setShowActions(true)}
+        onMouseLeave={() => setShowActions(false)}
+      >
+        {!isOwn && (
+          <div className="text-xs font-semibold mb-1 text-blue-600 dark:text-blue-400">
+            {message.senderName}
+          </div>
+        )}
+        {message.type === 'image' ? (
+          <img src={message.imageUrl} alt="Shared" className="max-w-full rounded" />
+        ) : (
+          <p className="text-sm">{message.text}</p>
+        )}
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-xs opacity-70">
+            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          {isOwn && (
+            <div className="flex items-center space-x-1">
+              {message.read ? <CheckCheck size={14} /> : <Check size={14} />}
+            </div>
+          )}
+        </div>
+        {showActions && isOwn && (
+          <div className="absolute -top-8 right-0 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-lg flex">
+            <button
+              onClick={() => onEdit(message)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-l-lg"
+            >
+              <Edit3 size={14} />
+            </button>
+            <button
+              onClick={() => onDelete(message.id)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-r-lg text-red-500"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ChatList (New Chat: search by username & send friend request)
+const ChatList = ({ currentUser, onSelectChat, activeChat }) => {
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState([]);
+  const [chats, setChats] = useState([
+    {
+      id: '1',
+      name: 'Alice Johnson',
+      type: 'direct',
+      isOnline: true,
+      lastMessage: { text: 'Hey, how are you?', timestamp: Date.now() - 300000 },
+      unreadCount: 2,
+      isTyping: false
+    },
+    {
+      id: '2',
+      name: 'Team Alpha',
+      type: 'group',
+      isOnline: false,
+      lastMessage: { text: 'Meeting at 3 PM', timestamp: Date.now() - 3600000 },
+      unreadCount: 0,
+      isTyping: true
+    }
+  ]);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+
+  const handleSearch = async () => {
+    if (!search.trim()) return;
+    // In real app: search in Firestore users
+    setResults([
+      { uid: "user2", username: search, photoURL: "" }
+    ]);
+  };
+
+  const handleRequest = async user => {
+    // In real app: add friend request in Firestore
+    alert(`Friend request sent to ${user.username}`);
+    setShowNewChatModal(false);
+    setSearch('');
+    setResults([]);
+  };
+
+  return (
+    <div className="w-80 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex flex-col">
+      <div className="p-4 border-b dark:border-gray-700">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search chats..."
+            className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            onFocus={() => setShowNewChatModal(false)}
+          />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {chats.map((chat) => (
+          <div
+            key={chat.id}
+            onClick={() => onSelectChat(chat)}
+            className={`p-4 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 ${
+              activeChat?.id === chat.id ? 'bg-blue-50 dark:bg-blue-900' : ''
+            }`}
+          >
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center overflow-hidden">
+                  {chat.type === 'group' ? (
+                    <Users size={20} />
+                  ) : (
+                    <User size={20} />
+                  )}
+                </div>
+                {chat.isOnline && (
+                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                    {chat.name}
+                  </h3>
+                  <span className="text-xs text-gray-500">
+                    {chat.lastMessage?.timestamp &&
+                      new Date(chat.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                    {chat.lastMessage?.text || 'No messages yet'}
+                  </p>
+                  {chat.unreadCount > 0 && (
+                    <span className="bg-blue-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      {chat.unreadCount}
+                    </span>
+                  )}
+                </div>
+                {chat.isTyping && (
+                  <p className="text-xs text-blue-500 mt-1">Typing...</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* New Chat */}
+      <div className="p-4 border-t dark:border-gray-700">
+        <button
+          onClick={() => setShowNewChatModal(true)}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2"
+        >
+          <Plus size={20} />
+          <span>New Chat</span>
+        </button>
+      </div>
+      {showNewChatModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Start New Chat
+            </h3>
+            <input
+              type="text"
+              placeholder="Enter username"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white mb-4"
+            />
+            <button
+              onClick={handleSearch}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg mb-2"
+            >
+              Search
+            </button>
+            {results.length > 0 && (
+              <div>
+                {results.map(user =>
+                  <div key={user.uid} className="flex items-center justify-between py-2">
+                    <span>{user.username}</span>
+                    <button onClick={() => handleRequest(user)} className="bg-green-500 px-2 py-1 text-white rounded">
+                      Add Friend
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => setShowNewChatModal(false)}
+              className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 rounded-lg mt-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Friend Requests
+const FriendRequests = ({ currentUser }) => {
+  const [requests, setRequests] = useState([
+    { id: "req1", from: "user2", username: "alice" }
+  ]);
+  const handleAccept = id => {
+    setRequests(r => r.filter(x => x.id !== id));
+    alert("Friend request accepted!");
+  };
+  const handleReject = id => {
+    setRequests(r => r.filter(x => x.id !== id));
+    alert("Friend request rejected!");
+  };
+  return (
+    <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <h2 className="text-xl font-semibold mb-4">Friend Requests</h2>
+      {requests.length === 0 && <p className="text-gray-500">No requests.</p>}
+      {requests.map(req =>
+        <div key={req.id} className="flex justify-between items-center py-2">
+          <span>{req.username}</span>
+          <div>
+            <button onClick={() => handleAccept(req.id)} className="mr-2 bg-green-500 px-2 py-1 text-white rounded">Accept</button>
+            <button onClick={() => handleReject(req.id)} className="bg-red-500 px-2 py-1 text-white rounded">Reject</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ChatWindow
+const ChatWindow = ({
+  currentUser,
+  activeChat
+}) => {
+  const [messages, setMessages] = useState([
+    {
+      id: '1',
+      text: 'Hello! How are you doing today?',
+      senderId: 'user2',
+      senderName: 'Alice Johnson',
+      timestamp: Date.now() - 3600000,
+      read: true,
+      type: 'text'
+    },
+    {
+      id: '2',
+      text: 'I\'m doing great! Just working on some projects.',
+      senderId: 'user1',
+      senderName: 'John Doe',
+      timestamp: Date.now() - 3000000,
+      read: true,
+      type: 'text'
+    }
+  ]);
+  const [newMessage, setNewMessage] = useState('');
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(scrollToBottom, [messages]);
+
+  const handleSend = () => {
+    if (newMessage.trim()) {
+      if (editingMessage) {
+        setMessages(prev => prev.map(msg =>
+          msg.id === editingMessage.id ? { ...msg, text: newMessage, edited: true } : msg
+        ));
+        setEditingMessage(null);
+      } else {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          text: newMessage,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName,
+          timestamp: Date.now(),
+          read: false,
+          type: 'text'
+        }]);
+      }
+      setNewMessage('');
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleInputChange = (e) => {
+    setNewMessage(e.target.value);
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          text: "",
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName,
+          timestamp: Date.now(),
+          read: false,
+          type: "image",
+          imageUrl: e.target.result
+        }]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  if (!activeChat) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <MessageSquare size={64} className="mx-auto text-gray-400 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400">
+            Select a chat to start messaging
+          </h2>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-white dark:bg-gray-900">
+      {/* Chat header */}
+      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 p-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="relative">
+            <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
+              {activeChat.type === 'group' ? <Users size={20} /> : <User size={20} />}
+            </div>
+            {activeChat.isOnline && (
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+            )}
+          </div>
+          <div>
+            <h2 className="font-semibold text-gray-900 dark:text-white">{activeChat.name}</h2>
+            <p className="text-sm text-gray-500">
+              {activeChat.isOnline ? 'Online' : 'Last seen recently'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+          >
+            {darkMode
+              ? <Sun size={20} className="text-gray-600 dark:text-gray-400" />
+              : <Moon size={20} className="text-gray-600 dark:text-gray-400" />}
+          </button>
+          <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+            <MoreVertical size={20} className="text-gray-600 dark:text-gray-400" />
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((message) => (
+          <Message
+            key={message.id}
+            message={message}
+            currentUser={currentUser}
+            onEdit={setEditingMessage}
+            onDelete={id => setMessages(prev => prev.filter(msg => msg.id !== id))}
+          />
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Message input */}
+      <div className="bg-white dark:bg-gray-800 border-t dark:border-gray-700 p-4">
+        <div className="flex items-center space-x-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageUpload}
+            accept="image/*"
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+          >
+            <Image size={20} className="text-gray-600 dark:text-gray-400" />
+          </button>
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={handleInputChange}
+              onKeyPress={handleKeyPress}
+              placeholder={editingMessage ? "Edit message..." : "Type a message..."}
+              className="w-full px-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white pr-10"
+            />
+            <div className="absolute right-2 top-2">
+              <button
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded"
+              >
+                <Smile size={16} className="text-gray-600 dark:text-gray-400" />
+              </button>
+              <EmojiPicker
+                isOpen={showEmojiPicker}
+                onClose={() => setShowEmojiPicker(false)}
+                onEmojiSelect={(emoji) => setNewMessage(prev => prev + emoji)}
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleSend}
+            disabled={!newMessage.trim()}
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white p-2 rounded-lg"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+        {editingMessage && (
+          <div className="mt-2 flex items-center justify-between bg-yellow-50 dark:bg-yellow-900 p-2 rounded">
+            <span className="text-sm text-yellow-800 dark:text-yellow-200">
+              Editing message
+            </span>
+            <button
+              onClick={() => setEditingMessage(null)}
+              className="text-yellow-800 dark:text-yellow-200 hover:text-yellow-900 dark:hover:text-yellow-100"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Profile
+const UserProfile = ({ user }) => {
+  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [isEditing, setIsEditing] = useState(false);
+
+  const handleSave = async () => {
+    try {
+      await updateProfile(auth.currentUser, { displayName });
+      setIsEditing(false);
+    } catch (error) {
+      alert('Error updating profile');
+    }
+  };
+
+  return (
+    <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md mx-auto">
+      <div className="text-center mb-6">
+        <div className="w-20 h-20 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden">
+          {user?.photoURL ? (
+            <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            <User size={32} />
+          )}
+        </div>
+        {isEditing ? (
+          <div className="space-y-4">
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="Display Name"
+            />
+            <div className="flex space-x-2">
+              <button
+                onClick={handleSave}
+                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              {user?.displayName || 'Anonymous User'}
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">{user?.email}</p>
+            <button
+              onClick={() => setIsEditing(true)}
+              className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+            >
+              Edit Profile
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Settings (simplified, no backend logic)
+
+
+// Main combined app
+const App = () => {
+  const [loading, setLoading] = useState(true);
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [showRegister, setShowRegister] = useState(false);
+  const [section, setSection] = useState("chats");
+  const [activeChat, setActiveChat] = useState(null);
+  const [showAbout, setShowAbout] = useState(false);
+
+  useEffect(() => {
+    setTimeout(() => setLoading(false), 3000);
+    return auth.onAuthStateChanged(u => setFirebaseUser(u));
+  }, []);
+
+  if (loading) return <Loader />;
+  if (!firebaseUser) {
+    return showRegister ? (
+      <Register onRegister={() => setShowRegister(false)} />
+    ) : (
+      <Login onLogin={() => setFirebaseUser(auth.currentUser)} onShowRegister={() => setShowRegister(true)} />
+    );
+  }
+  return (
+    <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
+      <Sidebar
+        user={firebaseUser}
+        onProfile={() => setSection("profile")}
+        onFriends={() => setSection("chats")}
+        onRequests={() => setSection("requests")}
+        onSettings={() => setSection("settings")}
+        onLogout={() => window.location.reload()}
+        onAbout={() => setShowAbout(true)}
+        selected={section}
+      />
+      <div className="flex-1 flex">
+        {section === "chats" && (
+          <>
+            <ChatList
+              currentUser={firebaseUser}
+              onSelectChat={setActiveChat}
+              activeChat={activeChat}
+            />
+            <ChatWindow
+              currentUser={firebaseUser}
+              activeChat={activeChat}
+            />
+          </>
+        )}
+        {section === "requests" && (
+          <div className="flex-1 flex items-center justify-center">
+            <FriendRequests currentUser={firebaseUser} />
+          </div>
+        )}
+        {section === "profile" && (
+          <div className="flex-1 flex items-center justify-center">
+            <UserProfile user={firebaseUser} />
+          </div>
+        )}
+        {section === "settings" && (
+          <div className="flex-1 flex items-center justify-center">
+            <Settings
+              onAbout={() => setShowAbout(true)}
+              onLogout={() => window.location.reload()}
+            />
+          </div>
+        )}
+      </div>
+      {showAbout && <AboutUs onClose={() => setShowAbout(false)} />}
+    </div>
+  );
+};
+
+export default App;
