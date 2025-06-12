@@ -194,9 +194,10 @@ const AboutUs = ({ onClose }) => (
       <div className="w-24 h-24 rounded-full mx-auto mb-4 bg-blue-100 flex items-center justify-center">
         <User size={48} className="text-blue-700" />
       </div>
-      <h2 className="text-xl font-semibold text-center">About This App</h2>
+      <h2 className="text-xl font-semibold text-center">About The Developer</h2>
+      <img scr="https://github.com/CodeCr4cker/react-chat-app/blob/master/public/images/About.jpg"></img>
       <p className="mt-4 text-center text-gray-700 dark:text-gray-300">
-        Developed by <b>Your Name</b>.<br />
+        Developed by <b>Divyanshu Pandey</b>.<br />
         Secure, privacy-first, modern chat with friend requests, blocking, and more!
       </p>
     </div>
@@ -205,7 +206,9 @@ const AboutUs = ({ onClose }) => (
 
 // Emoji Picker
 const EmojiPicker = ({ onEmojiSelect, isOpen, onClose }) => {
-  const emojis = ['😀', '😂', '😍', '🥰', '😊', '😎', '🤔', '😢', '😡', '👍', '👎', '❤️', '🔥', '💯'];
+  const emojis = ['😀', '😉', '👍', '😭', '🤣', '💐', '👑', '🙏', '💪', '👏', '👍', '👎', '🫶', ’🙌’, ’👐’,
+                  ’🤲’, ’🤜🤛’, ’✊’,
+                  ’👊’, '😂', '😍', '🥰', '😊', '😎', '🤔', '😢', '😡', '👍', '👎', '❤️', '🔥', '💯'];
   if (!isOpen) return null;
   return (
     <div className="absolute bottom-12 right-0 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-3 shadow-lg z-50">
