@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  User, Send, Plus, Settings, LogOut, Moon, Sun, Image, Smile, Edit3, Trash2, Check, CheckCheck,
-  MessageSquare, Users, Bell,  BellOff, Search, MoreVertical
+  User, Send, Plus, Settings as SettingsIcon, LogOut, Moon, Sun, Image, Smile, Edit3, Trash2, Check, CheckCheck,
+  MessageSquare, Users, Bell, Search, MoreVertical
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
 import {
-  getFirestore, 
-  getDocs, 
-  collection,  
-  addDoc, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  where, 
-  doc, 
+  getFirestore,
+  getDocs,
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  where,
+  doc,
   updateDoc,
-  deleteDoc, 
+  deleteDoc,
   serverTimestamp
 } from "firebase/firestore";
 import {
@@ -177,7 +177,7 @@ const Sidebar = ({
     </button>
     <button onClick={onFriends}><Users className="text-white" /></button>
     <button onClick={onRequests}><Bell className="text-white" /></button>
-    <button onClick={onSettings}><Settings className="text-white" /></button>
+    <button onClick={onSettings}><SettingsIcon className="text-white" /></button>
     <button onClick={onAbout}><MessageSquare className="text-white" /></button>
     <div className="flex-1"></div>
     <button onClick={onLogout} className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center">
@@ -190,7 +190,7 @@ const Sidebar = ({
 const AboutUs = ({ onClose }) => (
   <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
     <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md w-full relative">
-      <button className="absolute top-2 right-2" onClick={onClose}>✖</button>
+      <button className="absolute top-2 right-2" onClick={onClose}>âœ–</button>
       <div className="w-24 h-24 rounded-full mx-auto mb-4 bg-blue-100 flex items-center justify-center">
         <User size={48} className="text-blue-700" />
       </div>
@@ -205,7 +205,7 @@ const AboutUs = ({ onClose }) => (
 
 // Emoji Picker
 const EmojiPicker = ({ onEmojiSelect, isOpen, onClose }) => {
-  const emojis = ['😀', '😂', '😍', '🥰', '😊', '😎', '🤔', '😢', '😡', '👍', '👎', '❤️', '🔥', '💯'];
+  const emojis = ['ðŸ˜€', 'ðŸ˜‚', 'ðŸ˜', 'ðŸ¥°', 'ðŸ˜Š', 'ðŸ˜Ž', 'ðŸ¤”', 'ðŸ˜¢', 'ðŸ˜¡', 'ðŸ‘', 'ðŸ‘Ž', 'â¤ï¸', 'ðŸ”¥', 'ðŸ’¯'];
   if (!isOpen) return null;
   return (
     <div className="absolute bottom-12 right-0 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-3 shadow-lg z-50">
@@ -287,38 +287,69 @@ const Message = ({ message, currentUser, onEdit, onDelete }) => {
 const ChatList = ({ currentUser, onSelectChat, activeChat }) => {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
-  const [chats, setChats] = useState([
-    {
-      id: '1',
-      name: 'Alice Johnson',
-      type: 'direct',
-      isOnline: true,
-      lastMessage: { text: 'Hey, how are you?', timestamp: Date.now() - 300000 },
-      unreadCount: 2,
-      isTyping: false
-    },
-    {
-      id: '2',
-      name: 'Team Alpha',
-      type: 'group',
-      isOnline: false,
-      lastMessage: { text: 'Meeting at 3 PM', timestamp: Date.now() - 3600000 },
-      unreadCount: 0,
-      isTyping: true
-    }
-  ]);
+  const [chats, setChats] = useState([]);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    // Listen for chats where the current user is a participant
+    const q = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", currentUser.uid),
+      orderBy("lastUpdated", "desc")
+    );
+    const unsub = onSnapshot(q, async (snapshot) => {
+      const chatDocs = await Promise.all(snapshot.docs.map(async docSnap => {
+        const data = docSnap.data();
+        // For direct chat, get the other user displayName
+        if (data.type === "direct") {
+          const otherUid = data.participants.find(uid => uid !== currentUser.uid);
+          let name = "Unknown";
+          let isOnline = false;
+          if (otherUid) {
+            const q = query(collection(db, "users"), where("uid", "==", otherUid));
+            const docs = await getDocs(q);
+            if (!docs.empty) {
+              const user = docs.docs[0].data();
+              name = user.username || user.displayName || "Unknown";
+              // Optionally, use user.status for online status
+            }
+          }
+          return {
+            ...data,
+            id: docSnap.id,
+            name,
+            isOnline,
+          };
+        } else {
+          // Group chat
+          return { ...data, id: docSnap.id, name: data.name, isOnline: false };
+        }
+      }));
+      setChats(chatDocs);
+    });
+    return () => unsub();
+  }, [currentUser]);
 
   const handleSearch = async () => {
     if (!search.trim()) return;
-    // In real app: search in Firestore users
-    setResults([
-      { uid: "user2", username: search, photoURL: "" }
-    ]);
+    const q = query(collection(db, "users"), where("username", "==", search));
+    const docs = await getDocs(q);
+    const found = [];
+    docs.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.uid !== currentUser.uid) found.push(data);
+    });
+    setResults(found);
   };
 
   const handleRequest = async user => {
-    // In real app: add friend request in Firestore
+    // Add friend request in Firestore
+    await addDoc(collection(db, "friend_requests"), {
+      from: currentUser.uid,
+      to: user.uid,
+      timestamp: serverTimestamp()
+    });
     alert(`Friend request sent to ${user.username}`);
     setShowNewChatModal(false);
     setSearch('');
@@ -335,6 +366,8 @@ const ChatList = ({ currentUser, onSelectChat, activeChat }) => {
             placeholder="Search chats..."
             className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             onFocus={() => setShowNewChatModal(false)}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
           />
         </div>
       </div>
@@ -367,7 +400,7 @@ const ChatList = ({ currentUser, onSelectChat, activeChat }) => {
                   </h3>
                   <span className="text-xs text-gray-500">
                     {chat.lastMessage?.timestamp &&
-                      new Date(chat.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      new Date(chat.lastMessage.timestamp.toDate?.() ?? chat.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     }
                   </span>
                 </div>
@@ -445,392 +478,68 @@ const ChatList = ({ currentUser, onSelectChat, activeChat }) => {
 
 // Friend Requests
 const FriendRequests = ({ currentUser }) => {
-  const [requests, setRequests] = useState([
-    { id: "req1", from: "user2", username: "alice" }
-  ]);
-  const handleAccept = id => {
-    setRequests(r => r.filter(x => x.id !== id));
-    alert("Friend request accepted!");
-  };
-  const handleReject = id => {
-    setRequests(r => r.filter(x => x.id !== id));
-    alert("Friend request rejected!");
-  };
-  return (
-    <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-xl font-semibold mb-4">Friend Requests</h2>
-      {requests.length === 0 && <p className="text-gray-500">No requests.</p>}
-      {requests.map(req =>
-        <div key={req.id} className="flex justify-between items-center py-2">
-          <span>{req.username}</span>
-          <div>
-            <button onClick={() => handleAccept(req.id)} className="mr-2 bg-green-500 px-2 py-1 text-white rounded">Accept</button>
-            <button onClick={() => handleReject(req.id)} className="bg-red-500 px-2 py-1 text-white rounded">Reject</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ChatWindow
-const ChatWindow = ({
-  currentUser,
-  activeChat
-}) => {
-  const [messages, setMessages] = useState([
-    {
-      id: '1',
-      text: 'Hello! How are you doing today?',
-      senderId: 'user2',
-      senderName: 'Alice Johnson',
-      timestamp: Date.now() - 3600000,
-      read: true,
-      type: 'text'
-    },
-    {
-      id: '2',
-      text: 'I\'m doing great! Just working on some projects.',
-      senderId: 'user1',
-      senderName: 'John Doe',
-      timestamp: Date.now() - 3000000,
-      read: true,
-      type: 'text'
-    }
-  ]);
-  const [newMessage, setNewMessage] = useState('');
-  const [editingMessage, setEditingMessage] = useState(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
-  const messagesEndRef = useRef(null);
-  const fileInputRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(scrollToBottom, [messages]);
-
-  const handleSend = () => {
-    if (newMessage.trim()) {
-      if (editingMessage) {
-        setMessages(prev => prev.map(msg =>
-          msg.id === editingMessage.id ? { ...msg, text: newMessage, edited: true } : msg
-        ));
-        setEditingMessage(null);
-      } else {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          text: newMessage,
-          senderId: currentUser.uid,
-          senderName: currentUser.displayName,
-          timestamp: Date.now(),
-          read: false,
-          type: 'text'
-        }]);
-      }
-      setNewMessage('');
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleInputChange = (e) => {
-    setNewMessage(e.target.value);
-  };
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          text: "",
-          senderId: currentUser.uid,
-          senderName: currentUser.displayName,
-          timestamp: Date.now(),
-          read: false,
-          type: "image",
-          imageUrl: e.target.result
-        }]);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  if (!activeChat) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <MessageSquare size={64} className="mx-auto text-gray-400 mb-4" />
-          <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400">
-            Select a chat to start messaging
-          </h2>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 flex flex-col bg-white dark:bg-gray-900">
-      {/* Chat header */}
-      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 p-4 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-              {activeChat.type === 'group' ? <Users size={20} /> : <User size={20} />}
-            </div>
-            {activeChat.isOnline && (
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
-            )}
-          </div>
-          <div>
-            <h2 className="font-semibold text-gray-900 dark:text-white">{activeChat.name}</h2>
-            <p className="text-sm text-gray-500">
-              {activeChat.isOnline ? 'Online' : 'Last seen recently'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-          >
-            {darkMode
-              ? <Sun size={20} className="text-gray-600 dark:text-gray-400" />
-              : <Moon size={20} className="text-gray-600 dark:text-gray-400" />}
-          </button>
-          <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-            <MoreVertical size={20} className="text-gray-600 dark:text-gray-400" />
-          </button>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <Message
-            key={message.id}
-            message={message}
-            currentUser={currentUser}
-            onEdit={setEditingMessage}
-            onDelete={id => setMessages(prev => prev.filter(msg => msg.id !== id))}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Message input */}
-      <div className="bg-white dark:bg-gray-800 border-t dark:border-gray-700 p-4">
-        <div className="flex items-center space-x-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImageUpload}
-            accept="image/*"
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-          >
-            <Image size={20} className="text-gray-600 dark:text-gray-400" />
-          </button>
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={handleInputChange}
-              onKeyPress={handleKeyPress}
-              placeholder={editingMessage ? "Edit message..." : "Type a message..."}
-              className="w-full px-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white pr-10"
-            />
-            <div className="absolute right-2 top-2">
-              <button
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded"
-              >
-                <Smile size={16} className="text-gray-600 dark:text-gray-400" />
-              </button>
-              <EmojiPicker
-                isOpen={showEmojiPicker}
-                onClose={() => setShowEmojiPicker(false)}
-                onEmojiSelect={(emoji) => setNewMessage(prev => prev + emoji)}
-              />
-            </div>
-          </div>
-          <button
-            onClick={handleSend}
-            disabled={!newMessage.trim()}
-            className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white p-2 rounded-lg"
-          >
-            <Send size={20} />
-          </button>
-        </div>
-        {editingMessage && (
-          <div className="mt-2 flex items-center justify-between bg-yellow-50 dark:bg-yellow-900 p-2 rounded">
-            <span className="text-sm text-yellow-800 dark:text-yellow-200">
-              Editing message
-            </span>
-            <button
-              onClick={() => setEditingMessage(null)}
-              className="text-yellow-800 dark:text-yellow-200 hover:text-yellow-900 dark:hover:text-yellow-100"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Profile
-const UserProfile = ({ user }) => {
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [isEditing, setIsEditing] = useState(false);
-
-  const handleSave = async () => {
-    try {
-      await updateProfile(auth.currentUser, { displayName });
-      setIsEditing(false);
-    } catch (error) {
-      alert('Error updating profile');
-    }
-  };
-
-  return (
-    <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md mx-auto">
-      <div className="text-center mb-6">
-        <div className="w-20 h-20 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden">
-          {user?.photoURL ? (
-            <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
-          ) : (
-            <User size={32} />
-          )}
-        </div>
-        {isEditing ? (
-          <div className="space-y-4">
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="Display Name"
-            />
-            <div className="flex space-x-2">
-              <button
-                onClick={handleSave}
-                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setIsEditing(false)}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {user?.displayName || 'Anonymous User'}
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400">{user?.email}</p>
-            <button
-              onClick={() => setIsEditing(true)}
-              className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
-            >
-              Edit Profile
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Settings (simplified, no backend logic)
-
-
-// Main combined app
-const App = () => {
-  const [loading, setLoading] = useState(true);
-  const [firebaseUser, setFirebaseUser] = useState(null);
-  const [showRegister, setShowRegister] = useState(false);
-  const [section, setSection] = useState("chats");
-  const [activeChat, setActiveChat] = useState(null);
-  const [showAbout, setShowAbout] = useState(false);
+  const [requests, setRequests] = useState([]);
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 3000);
-    return auth.onAuthStateChanged(u => setFirebaseUser(u));
-  }, []);
+    if (!currentUser) return;
+    // Listen for incoming friend requests
+    const q = query(collection(db, "friend_requests"), where("to", "==", currentUser.uid));
+    const unsub = onSnapshot(q, async snapshot => {
+      const reqs = [];
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        // Get sender username
+        let username = "Unknown";
+        const qUser = query(collection(db, "users"), where("uid", "==", data.from));
+        const docs = await getDocs(qUser);
+        if (!docs.empty) {
+          username = docs.docs[0].data().username || "Unknown";
+        }
+        reqs.push({
+          id: docSnap.id,
+          from: data.from,
+          username,
+        });
+      }
+      setRequests(reqs);
+    });
+    return () => unsub();
+  }, [currentUser]);
 
-  if (loading) return <Loader />;
-  if (!firebaseUser) {
-    return showRegister ? (
-      <Register onRegister={() => setShowRegister(false)} />
-    ) : (
-      <Login onLogin={() => setFirebaseUser(auth.currentUser)} onShowRegister={() => setShowRegister(true)} />
-    );
-  }
+  const handleAccept = async id => {
+    // Get friend request data
+    const reqDoc = await getDocs(query(collection(db, "friend_requests"), where("__name__", "==", id)));
+    if (!reqDoc.empty) {
+      const req = reqDoc.docs[0].data();
+      // Create chat between users if not exists
+      const chatQ = query(collection(db, "chats"),
+        where("type", "==", "direct"),
+        where("participants", "array-contains", currentUser.uid)
+      );
+      let chatExists = false;
+      const chatSnaps = await getDocs(chatQ);
+      chatSnaps.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.participants.includes(req.from)) chatExists = true;
+      });
+      if (!chatExists) {
+        await addDoc(collection(db, "chats"), {
+          type: "direct",
+          participants: [currentUser.uid, req.from],
+          lastUpdated: serverTimestamp(),
+          lastMessage: null,
+        });
+      }
+      // Remove friend request
+      await deleteDoc(doc(db, "friend_requests", id));
+      alert("Friend request accepted!");
+    }
+  };
+
+  const handleReject = async id => {
+    await deleteDoc(doc(db, "friend_requests", id));
+    alert("Friend request rejected!");
+  };
+
   return (
-    <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
-      <Sidebar
-        user={firebaseUser}
-        onProfile={() => setSection("profile")}
-        onFriends={() => setSection("chats")}
-        onRequests={() => setSection("requests")}
-        onSettings={() => setSection("settings")}
-        onLogout={() => window.location.reload()}
-        onAbout={() => setShowAbout(true)}
-        selected={section}
-      />
-      <div className="flex-1 flex">
-        {section === "chats" && (
-          <>
-            <ChatList
-              currentUser={firebaseUser}
-              onSelectChat={setActiveChat}
-              activeChat={activeChat}
-            />
-            <ChatWindow
-              currentUser={firebaseUser}
-              activeChat={activeChat}
-            />
-          </>
-        )}
-        {section === "requests" && (
-          <div className="flex-1 flex items-center justify-center">
-            <FriendRequests currentUser={firebaseUser} />
-          </div>
-        )}
-        {section === "profile" && (
-          <div className="flex-1 flex items-center justify-center">
-            <UserProfile user={firebaseUser} />
-          </div>
-        )}
-        {section === "settings" && (
-          <div className="flex-1 flex items-center justify-center">
-            <Settings
-              onAbout={() => setShowAbout(true)}
-              onLogout={() => window.location.reload()}
-            />
-          </div>
-        )}
-      </div>
-      {showAbout && <AboutUs onClose={() => setShowAbout(false)} />}
-    </div>
-  );
-};
-
-export default App;
+    <div className="w-full max-w-md bg-white dark:bg-gray-800 ro
