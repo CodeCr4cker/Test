@@ -488,7 +488,6 @@ const ChatList = ({ currentUser, onSelectChat, activeChat }) => {
     </div>
   );
 };
-
 const FriendRequests = ({ currentUser }) => {
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState("");
