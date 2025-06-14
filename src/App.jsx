@@ -54,7 +54,7 @@ const Branding = () => (
       />
     </div>
     <h1 className="text-3xl font-extrabold text-blue-600 dark:text-blue-400 drop-shadow-sm select-none flex">
-      <span className="mr-2 animate-bounce">DarkNet</span>
+      <span className="mr-2 animate-bounce">Buddy</span>
       <span className="text-gray-800 dark:text-gray-300 font-mono animate-pulse">Chat</span>
     </h1>
     <span className="text-xs text-gray-400 mt-1 tracking-widest uppercase">by Divyanshu Pandey</span>
@@ -79,7 +79,7 @@ const Login = ({ onLogin, onShowRegister }) => {
   const [error, setError] = useState("");
   // Typing effect for branding slogan
   const [typed, setTyped] = useState("");
-  const slogan = "Secure, Modern, Private Chat";
+  const slogan = "Welcome Back ";
   useEffect(() => {
     let i = 0;
     const int = setInterval(() => {
@@ -1301,22 +1301,36 @@ const Settings = ({ onAbout, onLogout, chatPasswords, setChatPasswords }) => {
 
 // --- Dev account recreation and About text persistence ---
 async function ensureDeveloperAccount() {
-  // If developer account missing, create it with password: hh:mm@dd/mm
+  // If developer account missing, create it with password: "hacker"
   const username = "divyanshu";
   const q = query(collection(db, "users"), where("username", "==", username));
   const snap = await getDocs(q);
   if (!snap.empty) return snap.docs[0].data();
+  
   // Create developer account
-  const now = new Date();
-  const pad = x => ("" + x).padStart(2, "0");
-  const pass = `${pad(now.getHours())}:${pad(now.getMinutes())}@${pad(now.getDate())}/${pad(now.getMonth() + 1)}`;
+  const pass = "hacker"; // Static password
   const email = `${username}@Divyanshu.Pandey`;
   let userObj;
+  
   try {
     const { user } = await createUserWithEmailAndPassword(auth, email, pass);
-    await updateProfile(user, { displayName: username, photoURL: "https://avatars.githubusercontent.com/u/68625601?v=4" });
-    await addDoc(collection(db, "users"), { uid: user.uid, username, bio: "I am the developer.", photoURL: "https://avatars.githubusercontent.com/u/68625601?v=4", blocked: [] });
-    userObj = { uid: user.uid, username, bio: "I am the developer.", photoURL: "https://avatars.githubusercontent.com/u/68625601?v=4" };
+    await updateProfile(user, { 
+      displayName: username, 
+      photoURL: "https://avatars.githubusercontent.com/u/68625601?v=4" 
+    });
+    await addDoc(collection(db, "users"), { 
+      uid: user.uid, 
+      username, 
+      bio: "I am the developer.", 
+      photoURL: "https://avatars.githubusercontent.com/u/68625601?v=4", 
+      blocked: [] 
+    });
+    userObj = { 
+      uid: user.uid, 
+      username, 
+      bio: "I am the developer.", 
+      photoURL: "https://avatars.githubusercontent.com/u/68625601?v=4" 
+    };
   } catch (e) {
     // User may already exist, try to sign in
     try {
@@ -1328,9 +1342,9 @@ async function ensureDeveloperAccount() {
 }
 
 function getAboutText() {
-  return localStorage.getItem("about_text") || "Developed by Mr. Divyanshu Pandey.\nSecure, privacy-first, modern chat with friend requests, blocking, and more!";
+  return localStorage.getItem("about_text") || 
+    "Developed by Mr. Divyanshu Pandey.\nSecure, privacy-first, modern chat with friend requests, blocking, and more!";
 }
-
 // --- Main App ---
 const App = () => {
   const [loading, setLoading] = useState(true);
