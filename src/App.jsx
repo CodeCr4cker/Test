@@ -210,7 +210,7 @@ const AboutUs = ({ onClose }) => (
       <div className="w-24 h-24 rounded-full mx-auto mb-2 bg-blue-100 flex items-center justify-center overflow-hidden">
         <img src="https://avatars.githubusercontent.com/u/68625601?v=4" alt="Divyanshu Pandey" className="w-24 h-24 rounded-full object-cover"/>
       </div>
-      <h3 className="text-center font-semibold text-lg mb-1">divyanshu-pandey</h3>
+      <h3 className="text-center font-semibold text-lg mb-1">Divyanshu-Pandey</h3>
       <h2 className="text-xl font-semibold text-center">About This App</h2>
       <p className="mt-4 text-center text-gray-700 dark:text-gray-300">
         Developed by Mr.<b>Divyanshu Pandey</b>.<br />
