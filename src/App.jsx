@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   User, Send, Plus, Settings as SettingsIcon, LogOut, Moon, Sun, Image, Smile, Edit3, Trash2, Check, CheckCheck,
-  MessageSquare, Users, Search, MoreVertical, X, UserPlus, UserMinus, Trash, Info, Wallpaper, Ban, Lock, Unlock, Mail
+  MessageSquare, Edit2, Users, Search, MoreVertical, X, UserPlus, UserMinus, Trash, Info, Wallpaper, Ban, Lock, Unlock, Mail
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import {
