@@ -1,0 +1,618 @@
+// Mobile responsive chat with proper navigation
+const ChatList = ({ currentUser, onSelectChat, activeChat, chatGlowColors = {}, onShowRequests, isMobile, onChatSelect }) => {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  const [chats, setChats] = useState([]);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [mobileShowRequests, setMobileShowRequests] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const unsub = onSnapshot(
+      query(collection(db, "friendRequests"),
+        where("status", "==", "accepted"),
+        where("participants", "array-contains", currentUser.uid)
+      ),
+      async (snap) => {
+        const fetched = [];
+        for (const docSnap of snap.docs) {
+          const data = docSnap.data();
+          const friendUid = data.participants.find(uid => uid !== currentUser.uid);
+          if (friendUid) {
+            const userQ = query(collection(db, "users"), where("uid", "==", friendUid));
+            const userDocs = await getDocs(userQ);
+            let lastMessageTimestamp = 0;
+            const chatId = [currentUser.uid, friendUid].sort().join("_");
+            const msgSnap = await getDocs(query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "desc")));
+            if (!msgSnap.empty) lastMessageTimestamp = msgSnap.docs[0].data().timestamp?.toMillis?.() || msgSnap.docs[0].data().timestamp || 0;
+            if (!userDocs.empty) {
+              const user = userDocs.docs[0].data();
+              fetched.push({
+                id: friendUid,
+                name: user.username,
+                type: "direct",
+                isOnline: false,
+                lastMessage: null,
+                unreadCount: 0,
+                isTyping: false,
+                photoURL: user.photoURL,
+                lastMessageTimestamp,
+                isDev: user.username === "divyanshu"
+              });
+            }
+          }
+        }
+        fetched.sort((a, b) => {
+          if (a.isDev) return -1;
+          if (b.isDev) return 1;
+          return b.lastMessageTimestamp - a.lastMessageTimestamp;
+        });
+        setChats(fetched);
+      }
+    );
+    return () => unsub();
+  }, [currentUser]);
+
+  const handleSearch = async () => {
+    if (!search.trim()) return;
+    const q = query(collection(db, "users"), where("username", "==", search));
+    const docs = await getDocs(q);
+    const found = [];
+    docs.forEach(doc => {
+      if (doc.data().uid !== currentUser.uid) found.push(doc.data());
+    });
+    setResults(found);
+  };
+
+  const handleRequest = async user => {
+    if (!currentUser?.uid || !user?.uid) {
+      alert("Invalid user for friend request.");
+      return;
+    }
+    const q1 = query(collection(db, "friendRequests"),
+      where("from", "==", currentUser.uid),
+      where("to", "==", user.uid)
+    );
+    const q2 = query(collection(db, "friendRequests"),
+      where("from", "==", user.uid),
+      where("to", "==", currentUser.uid)
+    );
+    const docs1 = await getDocs(q1);
+    const docs2 = await getDocs(q2);
+    if (!docs1.empty || !docs2.empty) {
+      alert("Friend request already sent or you are already friends.");
+      return;
+    }
+    await addDoc(collection(db, "friendRequests"), {
+      from: currentUser.uid,
+      to: user.uid,
+      participants: [currentUser.uid, user.uid],
+      status: "pending",
+      createdAt: new Date()
+    });
+    alert(`Friend request sent to ${user.username}`);
+    setShowNewChatModal(false);
+    setSearch('');
+    setResults([]);
+  };
+
+  const handleShowRequests = () => {
+    setMobileShowRequests(true);
+    if (onShowRequests) onShowRequests();
+  };
+
+  const handleChatClick = (chat) => {
+    // Ensure chat selection works properly
+    if (chat && chat.id) {
+      onSelectChat(chat);
+      // For mobile, trigger chat selection callback
+      if (isMobile && onChatSelect) {
+        onChatSelect(chat);
+      }
+    }
+  };
+
+  return (
+    <div className={`chat-list w-80 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex flex-col ${isMobile ? 'mobile-chat-list' : ''}`}>
+      <div className="p-4 border-b dark:border-gray-700 flex items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search chats..."
+            className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            onFocus={() => setShowNewChatModal(false)}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <button
+          className="ml-3 p-2 rounded bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-700"
+          title="Friend Requests"
+          onClick={handleShowRequests}
+        >
+          <UserPlus className="text-blue-600 dark:text-blue-200" size={20} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {chats.map((chat) => (
+          <div
+            key={chat.id}
+            onClick={() => handleChatClick(chat)}
+            className={`p-4 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+              chat.isDev ? "bg-green-100 dark:bg-green-900 border-l-4 border-green-500" : ""
+            } ${activeChat?.id === chat.id ? 'bg-blue-50 dark:bg-blue-900' : ''}`}
+            style={chatGlowColors[[currentUser.uid, chat.id].sort().join("_")] ?
+              { boxShadow: `0px 0px 12px 0px ${chatGlowColors[[currentUser.uid, chat.id].sort().join("_")]}, 0 1px #eee` } : {}}
+          >
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center overflow-hidden">
+                  {chat.photoURL ? (
+                    <img src={chat.photoURL} alt={chat.name} className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <User size={20} />
+                  )}
+                  {chat.isDev && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></span>}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center">
+                  <h3 className={`font-semibold truncate ${chat.isDev ? "text-green-700 dark:text-green-300" : "text-gray-900 dark:text-white"}`}>
+                    {chat.name}
+                  </h3>
+                </div>
+                {chat.isTyping && (
+                  <p className="text-xs text-blue-500 mt-1">Typing...</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 border-t dark:border-gray-700">
+        <button
+          onClick={() => setShowNewChatModal(true)}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2"
+        >
+          <Plus size={20} />
+          <span>New Chat</span>
+        </button>
+      </div>
+      
+      {/* New Chat Modal */}
+      {showNewChatModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Start New Chat
+            </h3>
+            <input
+              type="text"
+              placeholder="Enter username"
+              value={search}
+              onChange={(e) => setSearch(e.target.value.replace(/\s/g, ""))}
+              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white mb-4"
+            />
+            <button
+              onClick={handleSearch}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg mb-2"
+            >
+              Search
+            </button>
+            {results.length > 0 && (
+              <div>
+                {results.map(user =>
+                  <div key={user.uid} className="flex items-center justify-between py-2">
+                    <span>{user.username}</span>
+                    <button onClick={() => handleRequest(user)} className="bg-green-500 px-2 py-1 text-white rounded">
+                      Add Friend
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => setShowNewChatModal(false)}
+              className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 rounded-lg mt-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Friend Requests Modal for mobile */}
+      {mobileShowRequests && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <FriendRequests currentUser={currentUser} />
+            <button
+              className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 rounded-lg mt-4"
+              onClick={() => setMobileShowRequests(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Enhanced ChatWindow with mobile back button
+const ChatWindow = ({
+  currentUser,
+  activeChat,
+  globalTheme,
+  setGlobalTheme,
+  wallpapers,
+  setWallpapers,
+  devChatId,
+  chatPasswords,
+  setChatPasswords,
+  onContactDev,
+  chatGlowColors,
+  setChatGlowColors,
+  isMobile,
+  onBackToList
+}) => {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [passwordPrompt, setPasswordPrompt] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordChange, setPasswordChange] = useState("");
+  const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const chatId = activeChat ? [currentUser.uid, activeChat.id].sort().join("_") : null;
+  const wallpaper = wallpapers[chatId] || "";
+
+  // Password-protected chat logic
+  useEffect(() => {
+    if (!activeChat) return;
+    if (chatPasswords[chatId] && !sessionStorage.getItem("chat:" + chatId + ":unlocked")) {
+      setLocked(true);
+      setShowPasswordPrompt(true);
+    } else {
+      setLocked(false);
+    }
+  }, [activeChat, chatId, chatPasswords]);
+
+  // Real-time messages + mark as read if not sender
+  useEffect(() => {
+    if (!chatId || locked) return;
+    const unsub = onSnapshot(
+      query(collection(db, "chats", chatId, "messages"), orderBy("timestamp")),
+      snap => {
+        const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setMessages(docs);
+        docs.forEach(msg => {
+          if (msg.senderId !== currentUser.uid && !msg.read) {
+            updateDoc(doc(db, "chats", chatId, "messages", msg.id), { read: true });
+          }
+        });
+      }
+    );
+    return () => unsub();
+  }, [chatId, currentUser.uid, locked]);
+
+  // Scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Typing indicator
+  useEffect(() => {
+    if (!newMessage) return;
+    setTyping(true);
+    const timeout = setTimeout(() => setTyping(false), 1500);
+    return () => clearTimeout(timeout);
+  }, [newMessage]);
+
+  // All the existing handler functions remain the same...
+  const handleUnlockChat = () => {
+    if (chatPasswords[chatId] === passwordInput) {
+      sessionStorage.setItem("chat:" + chatId + ":unlocked", "1");
+      setLocked(false);
+      setShowPasswordPrompt(false);
+      setPasswordInput("");
+    } else {
+      setPasswordPrompt("Wrong password!");
+    }
+  };
+
+  const handleSetChatPassword = () => {
+    setChatPasswords(prev => ({ ...prev, [chatId]: passwordChange }));
+    setShowPasswordChangeModal(false);
+    sessionStorage.removeItem("chat:" + chatId + ":unlocked");
+  };
+
+  const handleRemoveChatPassword = () => {
+    setChatPasswords(prev => {
+      const updated = { ...prev };
+      delete updated[chatId];
+      return updated;
+    });
+    setShowMenu(false);
+    sessionStorage.removeItem("chat:" + chatId + ":unlocked");
+  };
+
+  const handleSend = async () => {
+    if (newMessage.trim() && chatId) {
+      await addDoc(collection(db, "chats", chatId, "messages"), {
+        text: newMessage,
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName,
+        timestamp: serverTimestamp(),
+        read: false,
+        type: "text"
+      });
+      setNewMessage("");
+      setEditingMessage(null);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const ref = storageRef(storage, `chat-images/${chatId}/${Date.now()}-${file.name}`);
+    await uploadBytes(ref, file);
+    const url = await getDownloadURL(ref);
+    await addDoc(collection(db, "chats", chatId, "messages"), {
+      text: "",
+      senderId: currentUser.uid,
+      senderName: currentUser.displayName,
+      timestamp: serverTimestamp(),
+      read: false,
+      type: "image",
+      imageUrl: url
+    });
+  };
+
+  // Other handler functions remain the same...
+  const handleUnfriend = async () => {
+    const q = query(collection(db, "friendRequests"),
+      where("status", "==", "accepted"),
+      where("participants", "array-contains", currentUser.uid)
+    );
+    const snap = await getDocs(q);
+    for (const fDoc of snap.docs) {
+      const d = fDoc.data();
+      if (d.participants.includes(activeChat.id)) {
+        await deleteDoc(fDoc.ref);
+      }
+    }
+    setShowMenu(false);
+    alert("Unfriended!");
+    window.location.reload();
+  };
+
+  const handleCleanChat = async () => {
+    if (!chatId) return;
+    const q = query(collection(db, "chats", chatId, "messages"));
+    const snap = await getDocs(q);
+    for (const m of snap.docs) {
+      await deleteDoc(m.ref);
+    }
+    setShowMenu(false);
+  };
+
+  const handleSetWallpaper = (url) => {
+    setWallpapers(prev => ({ ...prev, [chatId]: url }));
+    setShowWallpaperModal(false);
+    setShowMenu(false);
+  };
+
+  const handleRemoveWallpaper = () => {
+    setWallpapers(prev => {
+      const updated = { ...prev };
+      delete updated[chatId];
+      return updated;
+    });
+    setShowMenu(false);
+  };
+
+  const isDev = currentUser.displayName === "divyanshu";
+  const [highlightColor, setHighlightColor] = useState("#ff0");
+  const handleHighlightUser = () => {
+    if (!activeChat) return;
+    const chatIdKey = [currentUser.uid, activeChat.id].sort().join("_");
+    setChatGlowColors(prev => ({ ...prev, [chatIdKey]: highlightColor }));
+    alert(`Glow set for chat ${chatIdKey}!`);
+  };
+
+  if (!activeChat) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <MessageSquare size={64} className="mx-auto text-gray-400 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400">
+            Select a chat to start messaging
+          </h2>
+        </div>
+      </div>
+    );
+  }
+
+  // Password-protected chat UI
+  if (locked) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="bg-white dark:bg-gray-800 px-8 py-10 rounded-lg shadow-lg text-center max-w-sm w-full">
+          <Lock size={48} className="mx-auto text-blue-500 mb-2" />
+          <h3 className="font-semibold text-lg mb-1">This chat is password protected</h3>
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={e => setPasswordInput(e.target.value)}
+            className="w-full px-3 py-2 border rounded mb-2"
+            placeholder="Enter chat password"
+          />
+          {passwordPrompt && <div className="text-red-500 text-sm mb-2">{passwordPrompt}</div>}
+          <button className="w-full bg-blue-500 text-white py-2 rounded" onClick={handleUnlockChat}>Unlock</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex-1 flex flex-col bg-white dark:bg-gray-900 ${isMobile ? 'mobile-chat-window' : ''}`} style={wallpaper ? {backgroundImage: `url(${wallpaper})`, backgroundSize: 'cover'} : {}}>
+      {/* Header with back button for mobile */}
+      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 p-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          {/* Back button for mobile */}
+          {isMobile && onBackToList && (
+            <button
+              onClick={onBackToList}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg mr-2"
+            >
+              <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
+            </button>
+          )}
+          <div className="relative">
+            <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center overflow-hidden">
+              {activeChat.photoURL ? (
+                <img src={activeChat.photoURL} alt={activeChat.name} className="w-10 h-10 rounded-full object-cover" />
+              ) : (
+                <User size={20} />
+              )}
+            </div>
+          </div>
+          <div>
+            <h2 className={`font-semibold ${activeChat.name === "divyanshu" ? "text-green-700 dark:text-green-300" : "text-gray-900 dark:text-white"}`}>
+              {activeChat.name}
+              {activeChat.name === "divyanshu" ? <span className="ml-2 text-green-500 text-xs font-bold">DEV</span> : ""}
+            </h2>
+            <p className="text-sm text-gray-500">Chat</p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2 relative">
+          <button
+            onClick={() => setGlobalTheme(t => t === "dark" ? "light" : "dark")}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+          >
+            {globalTheme === "dark"
+              ? <Sun size={20} className="text-gray-600 dark:text-gray-400" />
+              : <Moon size={20} className="text-gray-600 dark:text-gray-400" />}
+          </button>
+          <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" onClick={() => setShowMenu(!showMenu)}>
+            <MoreVertical size={20} className="text-gray-600 dark:text-gray-400" />
+          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-10 bg-white dark:bg-gray-800 shadow rounded z-50 py-1 min-w-[240px]">
+              <button className="w-full px-4 py-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={() => setShowWallpaperModal(true)}><Wallpaper size={16}/><span>Set Wallpaper</span></button>
+              <button className="w-full px-4 py-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={handleRemoveWallpaper}><Image size={16}/> <span>Remove Wallpaper</span></button>
+              <button className="w-full px-4 py-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={handleCleanChat}><Trash size={16}/> <span>Clean Chat</span></button>
+              <button className="w-full px-4 py-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={handleUnfriend}><UserMinus size={16}/> <span>Unfriend</span></button>
+              <button className="w-full px-4 py-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={() => setShowPasswordChangeModal(true)}><Lock size={16}/> <span>{chatPasswords[chatId] ? "Change Chat Password" : "Set Chat Password"}</span></button>
+              {chatPasswords[chatId] && <button className="w-full px-4 py-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={handleRemoveChatPassword}><Unlock size={16}/> <span>Remove Chat Password</span></button>}
+              {activeChat.name === "divyanshu" && (
+                <button className="w-full px-4 py-2 flex items-center space-x-2 text-blue-600 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={onContactDev}><Mail size={16}/><span>Contact Dev</span></button>
+              )}
+              {isDev && (
+                <div className="border-t my-1 px-2 py-2">
+                  <label className="block mb-1">Highlight This User/Chat</label>
+                  <input
+                    type="color"
+                    value={highlightColor}
+                    onChange={e => setHighlightColor(e.target.value)}
+                    className="mr-2"
+                  />
+                  <button onClick={handleHighlightUser} className="bg-yellow-500 text-white px-2 py-1 rounded">Glow This Chat</button>
+                </div>
+              )}
+              <button className="w-full px-4 py-2 flex items-center space-x-2 text-red-500 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={() => setShowMenu(false)}><X size={16}/> <span>Close</span></button>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((message) => (
+          <Message
+            key={message.id}
+            message={message}
+            currentUser={currentUser}
+            onEdit={setEditingMessage}
+            onDelete={async id => { await deleteDoc(doc(db, "chats", chatId, "messages", id)); }}
+          />
+        ))}
+        {typing && <div className="pl-4 text-xs text-blue-400">Typing...</div>}
+        <div ref={messagesEndRef} />
+      </div>
+      
+      {/* Input area */}
+      <div className="bg-white dark:bg-gray-800 border-t dark:border-gray-700 p-4">
+        <div className="flex items-center space-x-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageUpload}
+            accept="image/*"
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+          >
+            <Image size={20} className="text-gray-600 dark:text-gray-400" />
+          </button>
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={e => setNewMessage(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder={editingMessage ? "Edit message..." : "Type a message..."}
+              className="w-full px-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white pr-10"
+            />
+            <div className="absolute right-2 top-2">
+              <button
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded"
+              >
+                <Smile size={16} className="text-gray-600 dark:text-gray-400" />
+              </button>
+              <EmojiPicker
+                isOpen={showEmojiPicker}
+                onClose={() => setShowEmojiPicker(false)}
+                onEmojiSelect={(emoji) => setNewMessage(prev => prev + emoji)}
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleSend}
+            disabled={!newMessage.trim()}
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white p-2 rounded-lg"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      </div>
+      
+      {/* All existing modals remain the same... */}
+      {showWallpaperModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Choose a Wallpaper</h3>
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                "https://wallpapercave.com/wp/wp2757874.jpg",
+                "https://images.unsplash.com/photo-1506744038136-46273834b3fb",
+                "https://images.unsplash.com/photo-1519125323398-675f0ddb6308",
+                "https://images.unsplash.com/photo-1465101046530-73398c7f28ca",
+                "https://images.unsplash.com/photo-1470770841072-f978cf4d019e",
+                "https://images.unsplash.com/photo-1444065381814-865dc9da92c0"
+              ].map(url =>
+                <img key={url} src={url}
+                  
