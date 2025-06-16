@@ -741,9 +741,86 @@ const ChatList = ({ currentUser, onSelectChat, activeChat, chatGlowColors = {}, 
           className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2"
         >
           <Plus size={20} />
+  const handleChatClick = (chat) => {
+    // Ensure chat selection works properly
+    if (chat && chat.id) {
+      onSelectChat(chat);
+      // For mobile, trigger chat selection callback
+      if (isMobile && onChatSelect) {
+        onChatSelect(chat);
+      }
+    }
+  };
+
+  return (
+    <div className={`chat-list w-80 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex flex-col ${isMobile ? 'mobile-chat-list' : ''}`}>
+      <div className="p-4 border-b dark:border-gray-700 flex items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search chats..."
+            className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            onFocus={() => setShowNewChatModal(false)}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <button
+          className="ml-3 p-2 rounded bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-700"
+          title="Friend Requests"
+          onClick={handleShowRequests}
+        >
+          <UserPlus className="text-blue-600 dark:text-blue-200" size={20} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {chats.map((chat) => (
+          <div
+            key={chat.id}
+            onClick={() => handleChatClick(chat)}
+            className={`p-4 border-b dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+              chat.isDev ? "bg-green-100 dark:bg-green-900 border-l-4 border-green-500" : ""
+            } ${activeChat?.id === chat.id ? 'bg-blue-50 dark:bg-blue-900' : ''}`}
+            style={chatGlowColors[[currentUser.uid, chat.id].sort().join("_")] ?
+              { boxShadow: `0px 0px 12px 0px ${chatGlowColors[[currentUser.uid, chat.id].sort().join("_")]}, 0 1px #eee` } : {}}
+          >
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center overflow-hidden">
+                  {chat.photoURL ? (
+                    <img src={chat.photoURL} alt={chat.name} className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <User size={20} />
+                  )}
+                  {chat.isDev && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></span>}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center">
+                  <h3 className={`font-semibold truncate ${chat.isDev ? "text-green-700 dark:text-green-300" : "text-gray-900 dark:text-white"}`}>
+                    {chat.name}
+                  </h3>
+                </div>
+                {chat.isTyping && (
+                  <p className="text-xs text-blue-500 mt-1">Typing...</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 border-t dark:border-gray-700">
+        <button
+          onClick={() => setShowNewChatModal(true)}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2"
+        >
+          <Plus size={20} />
           <span>New Chat</span>
         </button>
       </div>
+      
+      {/* New Chat Modal */}
       {showNewChatModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
@@ -784,24 +861,6 @@ const ChatList = ({ currentUser, onSelectChat, activeChat, chatGlowColors = {}, 
           </div>
         </div>
       )}
-      {/* Friend Requests Modal for mobile */}
-      {mobileShowRequests && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-            <FriendRequests currentUser={currentUser} />
-            <button
-              className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 rounded-lg mt-4"
-              onClick={() => setMobileShowRequests(false)}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 
 // --- Friend Requests (not changed) ---
 const FriendRequests = ({ currentUser }) => {
@@ -869,7 +928,7 @@ const FriendRequests = ({ currentUser }) => {
   );
 };
 
-// --- Chat Window with delivered, typing, password-protected chat support, developer highlight/glow ---
+// Enhanced ChatWindow with mobile back button
 const ChatWindow = ({
   currentUser,
   activeChat,
@@ -883,6 +942,8 @@ const ChatWindow = ({
   onContactDev,
   chatGlowColors,
   setChatGlowColors,
+  isMobile,
+  onBackToList
 }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
@@ -937,7 +998,7 @@ const ChatWindow = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Typing indicator (demo only, not networked)
+  // Typing indicator
   useEffect(() => {
     if (!newMessage) return;
     setTyping(true);
@@ -945,7 +1006,7 @@ const ChatWindow = ({
     return () => clearTimeout(timeout);
   }, [newMessage]);
 
-  // Unlock chat if password matches
+  // All the existing handler functions remain the same...
   const handleUnlockChat = () => {
     if (chatPasswords[chatId] === passwordInput) {
       sessionStorage.setItem("chat:" + chatId + ":unlocked", "1");
@@ -957,14 +1018,12 @@ const ChatWindow = ({
     }
   };
 
-  // Change chat password (Settings)
   const handleSetChatPassword = () => {
     setChatPasswords(prev => ({ ...prev, [chatId]: passwordChange }));
     setShowPasswordChangeModal(false);
     sessionStorage.removeItem("chat:" + chatId + ":unlocked");
   };
 
-  // Remove chat password
   const handleRemoveChatPassword = () => {
     setChatPasswords(prev => {
       const updated = { ...prev };
@@ -1007,6 +1066,7 @@ const ChatWindow = ({
     });
   };
 
+  // Other handler functions remain the same...
   const handleUnfriend = async () => {
     const q = query(collection(db, "friendRequests"),
       where("status", "==", "accepted"),
@@ -1049,7 +1109,6 @@ const ChatWindow = ({
     setShowMenu(false);
   };
 
-  // Developer highlight/glow feature
   const isDev = currentUser.displayName === "divyanshu";
   const [highlightColor, setHighlightColor] = useState("#ff0");
   const handleHighlightUser = () => {
@@ -1094,9 +1153,19 @@ const ChatWindow = ({
   }
 
   return (
-    <div className={`flex-1 flex flex-col bg-white dark:bg-gray-900`} style={wallpaper ? {backgroundImage: `url(${wallpaper})`, backgroundSize: 'cover'} : {}}>
+    <div className={`flex-1 flex flex-col bg-white dark:bg-gray-900 ${isMobile ? 'mobile-chat-window' : ''}`} style={wallpaper ? {backgroundImage: `url(${wallpaper})`, backgroundSize: 'cover'} : {}}>
+      {/* Header with back button for mobile */}
       <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 p-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
+          {/* Back button for mobile */}
+          {isMobile && onBackToList && (
+            <button
+              onClick={onBackToList}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg mr-2"
+            >
+              <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
+            </button>
+          )}
           <div className="relative">
             <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center overflow-hidden">
               {activeChat.photoURL ? (
@@ -1107,7 +1176,10 @@ const ChatWindow = ({
             </div>
           </div>
           <div>
-            <h2 className={`font-semibold ${activeChat.name === "divyanshu" ? "text-green-700 dark:text-green-300" : "text-gray-900 dark:text-white"}`}>{activeChat.name}{activeChat.name === "divyanshu" ? <span className="ml-2 text-green-500 text-xs font-bold">DEV</span> : ""}</h2>
+            <h2 className={`font-semibold ${activeChat.name === "divyanshu" ? "text-green-700 dark:text-green-300" : "text-gray-900 dark:text-white"}`}>
+              {activeChat.name}
+              {activeChat.name === "divyanshu" ? <span className="ml-2 text-green-500 text-xs font-bold">DEV</span> : ""}
+            </h2>
             <p className="text-sm text-gray-500">Chat</p>
           </div>
         </div>
@@ -1151,6 +1223,8 @@ const ChatWindow = ({
           )}
         </div>
       </div>
+      
+      {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message) => (
           <Message
@@ -1164,6 +1238,8 @@ const ChatWindow = ({
         {typing && <div className="pl-4 text-xs text-blue-400">Typing...</div>}
         <div ref={messagesEndRef} />
       </div>
+      
+      {/* Input area */}
       <div className="bg-white dark:bg-gray-800 border-t dark:border-gray-700 p-4">
         <div className="flex items-center space-x-2">
           <input
@@ -1211,6 +1287,7 @@ const ChatWindow = ({
           </button>
         </div>
       </div>
+      
       {showWallpaperModal &&
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full">
