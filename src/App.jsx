@@ -743,7 +743,7 @@ const ChatList = ({ currentUser, onSelectChat, activeChat, chatGlowColors = {}, 
           <Plus size={20} />
   const handleChatClick = (chat) => {
     // Ensure chat selection works properly
-    if (chat && chat.id) {
+      (chat && chat.id) {
       onSelectChat(chat);
       // For mobile, trigger chat selection callback
       if (isMobile && onChatSelect) {
